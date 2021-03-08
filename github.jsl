@@ -2,7 +2,7 @@
 Names Default To Here( 1 );
 New Namespace("github");
 
-github:user="bryanboone-jmp";
+github:user="Bryan.Boone@jmp.com";
 github:url="https://api.github.com";
 github:encoded_password = "";
 
@@ -44,10 +44,17 @@ github:Password Prompt = Function({user = github:user, encoded_password = ""},
 				Text Box( "User:" ),
 				Text Box( user ),
 				Text Box( "Password:" ),
-				password_box = Text Edit Box( password ),	password_box << Password Style(1);
+				password_box = Text Edit Box( password, 
+					<< Set Function(
+						Function({this}, 
+							btn_ok << Click
+						)
+					)
+				),
+				password_box << Password Style(1);
 
 			),
-			H List Box( Button Box( "OK" ), Button Box( "Cancel" ) )
+			H List Box( btn_ok = Button Box( "OK" ), Button Box( "Cancel" ) )
 		)
 	);	
 	prompt["password_box"];
@@ -71,34 +78,90 @@ github:List Repository Files = Function({user = "", repo = "", branch = "main"},
 	github:Login();
 	request = New HTTP Request(
 		Method("GET"),
-		URL(github:url || "/repos/" || user || "/" || repo),
+		URL(github:url || "/repos/" || user || "/" || repo || "/contents"),
 		Username(github:Decode Password(github:encoded_password)[1]),
-		Password(github:Decode Password(github:encoded_password)[2] ),
+		Password(github:Decode Password(github:encoded_password)[2]),
 	);
-	data = request << Send;
-	Write("\!n" || data || "\!n");
+	json = request << Send;
 	files = {};
+	If(request << Is Successful,
+		json_jsl = ParseJSON(json);
+		For(i = 1, i <= NItems(json_jsl), i++,
+			Insert Into(files, json_jsl[i]["download_url"]);
+		);
+	);
 	files;
 );
 
 github:List Repository Branches = Function({user = "", repo = ""},
 	{Default Local},
 	github:Login();
-	auth_header = "Authorization: Basic " || github:encoded_password;
 	request = New HTTP Request(
 		Method("GET"),
 		URL(github:url || "/repos/" || user || "/" || repo || "/branches"),
+		Username(github:Decode Password(github:encoded_password)[1]),
+		Password(github:Decode Password(github:encoded_password)[2]),
 	);
-	request << Headers({auth_header});
-	data = request << Send;
-	Write("\!n" || data || "\!n");
-	files = {};
-	files;
+	json = request << Send;
+	branches = {};
+	If(request << Is Successful,
+		json_jsl = ParseJSON(json);
+		For(i = 1, i <= NItems(json_jsl), i++,
+			Insert Into(branches, json_jsl[i]["name"]);
+		);
+	);
+	branches;
 );
 
+github:Clone = Function({user = "", repo = "", branch= "main", dest=""},
+	{Default Local},
+	github:Login();
+	request = New HTTP Request(
+		Method("GET"),
+		URL(github:url || "/repos/" || user || "/" || repo || "/zipball/" || branch),
+		Username(github:Decode Password(github:encoded_password)[1]),
+		Password(github:Decode Password(github:encoded_password)[2]),
+	);
+	If(dest == "",
+		dest = "$TEMP/";
+	,
+		Substitute Into(dest, "\", "/");
+		If(!Ends With(dest, "/"),
+			dest ||= "/";
+		);
+	);
+	filename = request << Download(dest || "/" || repo || "_" || branch || ".zip", "replace");
+	If(!File Exists(filename),
+		filename = "";
+	);
+	if(filename != "",
+		//unzip it
+		za = Open( filename, "zip" );
+		dir_list = za << dir;
+		For(i = 1, i <= NItems(dir_list), i++,
+			key = dir_list[i];
+			Substitute Into(key, "\", "/");
+			If(Ends With(key, "/"),
+				Create Directory(key);
+			,
+				blob = za << read( key, Format( blob ) );
+				Write("\!n" || dest || key);
+				Save Text File( dest || key, blob );
+			);
+		);
+	);
+	filename;
+);
 user =  "bryanboone-jmp";
 repository = "HTTP-Request-with-githib";
 branch = "main";
+clone_destination = "$Downloads";
+
+branches = github:List Repository Branches(user, repository);
+show(branches);
 
 files = github:List Repository Files(user, repository, branch);
 show(files);
+
+file = github:Clone(user, repository, branch, "$Documents");
+show(file);
