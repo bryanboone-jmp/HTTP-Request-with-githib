@@ -1,0 +1,104 @@
+//https://gist.github.com/joyrexus/85bf6b02979d8a7b0308
+Names Default To Here( 1 );
+New Namespace("github");
+
+github:user="bryanboone-jmp";
+github:url="https://api.github.com";
+github:encoded_password = "";
+
+github:Basics = Function({},
+	{Default Local},
+	request = New HTTP Request(
+		Method("GET"),
+		URL(github:url || "/users/" || github:user),
+	);
+	data = request << Send;
+	data;
+);
+
+github:Encode Password = Function({user = "", password = ""},
+	{Default Local},
+	New HTTP Request() << Encode64 Char(user || ":" ||password);
+);
+
+github:Decode Password = Function({encoded_password = ""},
+	{Default Local},
+	Words(New HTTP Request() << Decode64 Char(encoded_password), ":");
+);
+
+	
+github:Password Prompt = Function({user = github:user, encoded_password = ""},
+	{Default Local},
+	If(encoded_password != "",
+		parts = github:Decode Password(encoded_password);
+		user = parts[1];
+		password = parts[2];
+		,
+		password = "";
+	);
+	prompt = New Window( "Connect to GitHub",
+		<<Modal,
+		<<Return Result,
+		V List Box(
+			lineup = Lineup Box( N Col( 2 ), Spacing(10),
+				Text Box( "User:" ),
+				Text Box( user ),
+				Text Box( "Password:" ),
+				password_box = Text Edit Box( password ),	password_box << Password Style(1);
+
+			),
+			H List Box( Button Box( "OK" ), Button Box( "Cancel" ) )
+		)
+	);	
+	prompt["password_box"];
+);
+
+github:Login = Function({},
+	{Default Local},
+	rc = 0;
+	encoded_password = github:encoded_password;
+	If(encoded_password == "",
+		//prompt for password
+		encoded_password = github:Password Prompt(user = github:user, encoded_password);
+	);
+	//try it out
+	github:encoded_password = encoded_password;
+	rc;
+);
+
+github:List Repository Files = Function({user = "", repo = "", branch = "main"},
+	{Default Local},
+	github:Login();
+	request = New HTTP Request(
+		Method("GET"),
+		URL(github:url || "/repos/" || user || "/" || repo),
+		Username(github:Decode Password(github:encoded_password)[1]),
+		Password(github:Decode Password(github:encoded_password)[2] ),
+	);
+	data = request << Send;
+	Write("\!n" || data || "\!n");
+	files = {};
+	files;
+);
+
+github:List Repository Branches = Function({user = "", repo = ""},
+	{Default Local},
+	github:Login();
+	auth_header = "Authorization: Basic " || github:encoded_password;
+	request = New HTTP Request(
+		Method("GET"),
+		URL(github:url || "/repos/" || user || "/" || repo || "/branches"),
+	);
+	request << Headers({auth_header});
+	data = request << Send;
+	Write("\!n" || data || "\!n");
+	files = {};
+	files;
+);
+
+user =  "bryanboone-jmp";
+repository = "HTTP-Request-with-githib";
+branch = "main";
+
+files = github:List Repository Files(user, repository, branch);
+show(files);
