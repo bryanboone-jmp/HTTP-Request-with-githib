@@ -2,7 +2,7 @@
 Names Default To Here( 1 );
 New Namespace("github");
 
-github:user="Bryan.Boone@jmp.com";
+github:user="";
 github:url="https://api.github.com";
 github:encoded_password = "";
 
